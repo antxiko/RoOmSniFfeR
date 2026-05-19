@@ -277,14 +277,31 @@ async def systems_cmd(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_html("\n".join(lines))
 
 
+def _as_system(word: str) -> str | None:
+    """Devuelve el sistema canónico si `word` es un sistema/alias, else None."""
+    w = word.lower()
+    canonical = SYSTEM_ALIASES.get(w, w)
+    return canonical if canonical in SYSTEMS else None
+
+
 def parse_args(args: list[str]) -> tuple[str | None, str]:
+    """Acepta el sistema al principio O al final. Si ambos, gana el primero.
+    Ejemplos:
+      ["snes","mario"]  -> ("snes", "mario")
+      ["mario","snes"]  -> ("snes", "mario")
+      ["mario"]         -> (None, "mario")
+    """
     if not args:
         return None, ""
-    first = args[0].lower()
-    # Aliases primero (intellivision -> intv, coleco -> colecovision, etc.)
-    canonical = SYSTEM_ALIASES.get(first, first)
-    if canonical in SYSTEMS:
-        return canonical, " ".join(args[1:]).strip()
+    # Probar primera palabra
+    sys_first = _as_system(args[0])
+    if sys_first:
+        return sys_first, " ".join(args[1:]).strip()
+    # Probar última palabra (si hay más de una)
+    if len(args) >= 2:
+        sys_last = _as_system(args[-1])
+        if sys_last:
+            return sys_last, " ".join(args[:-1]).strip()
     return None, " ".join(args).strip()
 
 
