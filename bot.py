@@ -305,38 +305,72 @@ def _as_system(word: str) -> str | None:
     return canonical if canonical in SYSTEMS else None
 
 
-def parse_args(args: list[str]) -> tuple[str | None, str]:
-    """Acepta el sistema al principio O al final. Si ambos, gana el primero.
+def parse_args(args: list[str]) -> tuple[list[str], str]:
+    """Toma todas las palabras al inicio Y al final que son sistemas;
+    el centro es la query. Acepta múltiples sistemas.
+
     Ejemplos:
-      ["snes","mario"]  -> ("snes", "mario")
-      ["mario","snes"]  -> ("snes", "mario")
-      ["mario"]         -> (None, "mario")
+      ["snes","mario"]            -> (["snes"], "mario")
+      ["mario","snes"]            -> (["snes"], "mario")
+      ["snes","md","mario"]       -> (["snes","md"], "mario")
+      ["mario","gba","gb"]        -> (["gba","gb"], "mario")
+      ["snes","mario","kart","gb"]-> (["snes","gb"], "mario kart")
+      ["mario"]                   -> ([], "mario")
     """
     if not args:
-        return None, ""
-    # Probar primera palabra
-    sys_first = _as_system(args[0])
-    if sys_first:
-        return sys_first, " ".join(args[1:]).strip()
-    # Probar última palabra (si hay más de una)
-    if len(args) >= 2:
-        sys_last = _as_system(args[-1])
-        if sys_last:
-            return sys_last, " ".join(args[:-1]).strip()
-    return None, " ".join(args).strip()
+        return [], ""
+    left = 0
+    right = len(args)
+    systems: list[str] = []
+    # Sistemas iniciales consecutivos
+    while left < right:
+        s = _as_system(args[left])
+        if not s:
+            break
+        if s not in systems:
+            systems.append(s)
+        left += 1
+    # Sistemas finales consecutivos (de derecha a izquierda)
+    tail: list[str] = []
+    while right > left:
+        s = _as_system(args[right - 1])
+        if not s:
+            break
+        if s not in systems and s not in tail:
+            tail.append(s)
+        right -= 1
+    # Restaurar orden de aparición original para los del final
+    systems.extend(reversed(tail))
+    query = " ".join(args[left:right]).strip()
+    return systems, query
 
 
-async def search_all(query: str, system: str | None) -> list[RomResult]:
+async def search_all(query: str, systems: list[str]) -> list[RomResult]:
+    """Busca en paralelo en (cada sistema × cada fuente). Deduplica por URL."""
+    if not systems:
+        return []
     async with make_client() as client:
-        coros = [src.search(client, query, system) for src in ALL_SOURCES]
-        chunks = await asyncio.gather(*coros, return_exceptions=True)
+        # Construir lista de (sistema, fuente) y disparar todas en paralelo.
+        tasks = [
+            (sys_, src, src.search(client, query, sys_))
+            for sys_ in systems
+            for src in ALL_SOURCES
+        ]
+        chunks = await asyncio.gather(
+            *(t[2] for t in tasks), return_exceptions=True
+        )
 
+    seen_urls: set[str] = set()
     results: list[RomResult] = []
-    for src, chunk in zip(ALL_SOURCES, chunks):
+    for (sys_, src, _), chunk in zip(tasks, chunks):
         if isinstance(chunk, Exception):
-            log.warning("%s falló: %s", src.name, chunk)
+            log.warning("[%s/%s] falló: %s", sys_, src.name, chunk)
             continue
-        results.extend(chunk)
+        for r in chunk:
+            if r.best_url in seen_urls:
+                continue
+            seen_urls.add(r.best_url)
+            results.append(r)
     return results
 
 
@@ -373,40 +407,59 @@ def render_results(results: list[RomResult], query: str) -> tuple[str, InlineKey
 
 
 async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    system, query = parse_args(context.args or [])
+    systems, query = parse_args(context.args or [])
     if not query:
         await update.effective_message.reply_html(
             "Uso: <code>/buscar &lt;sistema&gt; &lt;nombre&gt;</code>\n"
             "Ej: <code>/buscar snes chrono trigger</code>\n"
-            "También vale al final: <code>/buscar chrono trigger snes</code>"
+            "Varios sistemas: <code>/buscar snes md sonic</code>"
         )
         return
-    if not system:
+    if not systems:
         await update.effective_message.reply_html(
             f"🤔 Necesito un sistema para buscar <b>{escape(query)}</b>.\n\n"
             f"Ejemplos:\n"
             f"• <code>/buscar snes {escape(query)}</code>\n"
-            f"• <code>/buscar {escape(query)} gba</code>\n\n"
+            f"• <code>/buscar {escape(query)} gba</code>\n"
+            f"• <code>/buscar snes md {escape(query)}</code> (varios sistemas)\n\n"
             f"Lista de sistemas: /sistemas"
         )
         return
-    bad = blacklisted_term(system, query)
-    if bad:
+
+    # Filtrar sistemas blacklisted con esta query.
+    allowed: list[str] = []
+    blocked_terms: set[str] = set()
+    for s in systems:
+        bad = blacklisted_term(s, query)
+        if bad:
+            blocked_terms.add(bad)
+        else:
+            allowed.append(s)
+
+    if not allowed:
+        term = next(iter(blocked_terms), query)
         await update.effective_message.reply_html(
             f"🏴‍☠️ Este bot no apoya la piratería, piraaataaaa.\n"
-            f"<b>«{escape(bad)}»</b> es comercial y sigue a la venta. Panzer hijodeputa."
+            f"<b>«{escape(term)}»</b> es comercial y sigue a la venta. Panzer hijodeputa."
         )
         return
 
-    msg = await update.effective_message.reply_html(f"🐕‍🦺 Olfateando <i>{escape(query)}</i>…")
+    sys_label = ", ".join(allowed)
+    msg = await update.effective_message.reply_html(
+        f"🐕‍🦺 Olfateando <i>{escape(query)}</i> en <b>{escape(sys_label)}</b>…"
+    )
     try:
-        results = await search_all(query, system)
+        results = await search_all(query, allowed)
     except Exception as e:
         log.exception("búsqueda falló")
         await msg.edit_text(f"💥 Error: {e}")
         return
 
     text, kb = render_results(results, query)
+    if blocked_terms:
+        # Aviso suave de que algún sistema quedó bloqueado
+        warn = ", ".join(f"«{escape(t)}»" for t in blocked_terms)
+        text = f"<i>⚠️ Bloqueado por blacklist: {warn}</i>\n\n" + text
     await msg.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=kb, disable_web_page_preview=True)
 
 
@@ -431,11 +484,11 @@ async def inline_query(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         await iq.answer([help_article], cache_time=10, is_personal=False)
         return
 
-    system, query = parse_args(text.split())
+    systems, query = parse_args(text.split())
     if not query:
         await iq.answer([], cache_time=10, is_personal=False)
         return
-    if not system:
+    if not systems:
         hint = InlineQueryResultArticle(
             id="nosys",
             title="Falta el sistema",
@@ -448,12 +501,14 @@ async def inline_query(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         )
         await iq.answer([hint], cache_time=10, is_personal=False)
         return
-    bad = blacklisted_term(system, query)
-    if bad:
+
+    allowed = [s for s in systems if not blacklisted_term(s, query)]
+    if not allowed:
+        bad = blacklisted_term(systems[0], query) or query
         pirate = InlineQueryResultArticle(
             id="blacklist",
             title="🏴‍☠️ Piraaataaaa",
-            description=f"«{bad}» es comercial. Cómpralo.",
+            description=f"«{bad}» es comercial. Panzer hijodeputa.",
             input_message_content=InputTextMessageContent(
                 f"🏴‍☠️ Este bot no apoya la piratería, piraaataaaa.\n"
                 f"<b>«{escape(bad)}»</b> es comercial y sigue a la venta. Panzer hijodeputa.",
@@ -465,7 +520,7 @@ async def inline_query(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
 
     try:
         # Telegram da 10s de timeout para inline; le dejamos 8s a las fuentes.
-        results = await asyncio.wait_for(search_all(query, system), timeout=8.0)
+        results = await asyncio.wait_for(search_all(query, allowed), timeout=8.0)
     except asyncio.TimeoutError:
         log.info("inline timeout para %r/%r", system, query)
         results = []
