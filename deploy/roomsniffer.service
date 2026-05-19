@@ -1,0 +1,34 @@
+[Unit]
+Description=RoOmSniffeR Telegram bot
+Documentation=https://github.com/antxiko/RoOmSniFfeR
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=roomsniffer
+Group=roomsniffer
+WorkingDirectory=/opt/roomsniffer
+EnvironmentFile=/opt/roomsniffer/.env
+ExecStart=/opt/roomsniffer/.venv/bin/python /opt/roomsniffer/bot.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/roomsniffer
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

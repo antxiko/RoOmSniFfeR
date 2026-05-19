@@ -11,6 +11,9 @@ handhelds raros y arcade.
   y devuelve botones inline que abren el enlace de descarga.
 - `/sistemas` — lista de sistemas soportados, agrupados por familia.
 - `/help` — ayuda.
+- **Modo inline**: escribe `@RoOmSniFfeR_Bot snes mario` desde cualquier
+  chat (de Telegram). El bot te ofrece una lista de resultados que puedes
+  enviar al chat con un toque, sin abrir el bot.
 
 Para sistemas con **packs monolíticos** (TOSEC en un solo `.zip`), el bot
 abre el contenido del ZIP remotamente y devuelve el enlace al juego concreto
@@ -89,7 +92,7 @@ verlos agrupados. Algunos destacados:
   MZ-700, MZ-800, NEC PC-6001, TI-99/4A
 - **Calculadoras**: TI-83 Plus
 
-## Setup
+## Setup (local)
 
 ```bash
 git clone https://github.com/antxiko/RoOmSniFfeR.git
@@ -103,19 +106,40 @@ python bot.py
 
 Requisitos: Python 3.10+ (probado en 3.14), token de bot de Telegram.
 
+### Activar modo inline (opcional pero recomendado)
+
+En [@BotFather](https://t.me/BotFather):
+
+1. `/setinline` → elige tu bot
+2. Escribe un placeholder, ej: `sistema juego`
+3. Listo — ya puedes usar `@TuBot zelda n64` desde cualquier chat
+
+## Desplegar en VPS (Linux + systemd)
+
+Ver [deploy/INSTALL.md](deploy/INSTALL.md) para la guía paso a paso. Incluye:
+
+- Usuario dedicado sin shell
+- Service unit con auto-reinicio y hardening (`ProtectSystem`, `NoNewPrivileges`, etc.)
+- Logs en journald
+- Procedimiento de actualización con `git pull` + `systemctl restart`
+
 ## Estructura
 
 ```
 RoOmSniFfeR/
-├── bot.py                    # handlers /buscar /sistemas /help, parser, aliases
+├── bot.py                    # handlers (/buscar /sistemas /help + inline), parser, aliases
 ├── sources/
 │   ├── __init__.py           # registro ALL_SOURCES
 │   ├── base.py               # Source ABC, RomResult, make_client
 │   ├── archive_org.py        # API JSON archive.org con filtro por colección
 │   ├── archive_packs.py      # browse interno de packs y zips TOSEC
 │   └── cdromance.py          # scraping cdromance.com por categoría
+├── deploy/
+│   ├── roomsniffer.service   # systemd unit file
+│   └── INSTALL.md            # guía despliegue en VPS
 ├── requirements.txt
 ├── .env.example
+├── LICENSE                   # GPL-3.0
 └── README.md
 ```
 
@@ -156,7 +180,7 @@ instantáneas (cache en memoria por sesión).
 
 ## Licencia
 
-MIT.
+[GPL-3.0](LICENSE).
 
 ## Aviso legal
 

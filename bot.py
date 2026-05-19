@@ -1,14 +1,26 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 from html import escape
 
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InlineQueryResultArticle,
+    InputTextMessageContent,
+    Update,
+)
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    InlineQueryHandler,
+)
 
 from sources import ALL_SOURCES, RomResult
 from sources.base import make_client
@@ -342,6 +354,84 @@ async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await msg.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=kb, disable_web_page_preview=True)
 
 
+async def inline_query(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+    """Modo inline: @RoOmSniFfeR_Bot <sistema> <juego> desde cualquier chat."""
+    iq = update.inline_query
+    if iq is None:
+        return
+    text = (iq.query or "").strip()
+
+    if not text:
+        # Mensaje de ayuda cuando aún no han escrito nada
+        help_article = InlineQueryResultArticle(
+            id="help",
+            title="Escribe sistema y juego",
+            description="Ej: snes mario · gba zelda · arcade pacman",
+            input_message_content=InputTextMessageContent(
+                "Uso: <code>@RoOmSniFfeR_Bot &lt;sistema&gt; &lt;juego&gt;</code>",
+                parse_mode=ParseMode.HTML,
+            ),
+        )
+        await iq.answer([help_article], cache_time=10, is_personal=False)
+        return
+
+    system, query = parse_args(text.split())
+    if not query:
+        await iq.answer([], cache_time=10, is_personal=False)
+        return
+
+    try:
+        # Telegram da 10s de timeout para inline; le dejamos 8s a las fuentes.
+        results = await asyncio.wait_for(search_all(query, system), timeout=8.0)
+    except asyncio.TimeoutError:
+        log.info("inline timeout para %r/%r", system, query)
+        results = []
+    except Exception:
+        log.exception("inline search falló")
+        results = []
+
+    articles: list[InlineQueryResultArticle] = []
+    seen_ids: set[str] = set()
+    for r in results[:30]:
+        rid = hashlib.sha1(r.best_url.encode()).hexdigest()[:16]
+        if rid in seen_ids:
+            continue
+        seen_ids.add(rid)
+        size = f" · {r.size}" if r.size else ""
+        direct = " 📎" if r.has_direct_download else ""
+        message = (
+            f"<b>{escape(r.title)}</b>\n"
+            f"<i>{escape(r.system)} · {escape(r.source)}{escape(size)}</i>{direct}\n"
+            f"{r.best_url}"
+        )
+        articles.append(
+            InlineQueryResultArticle(
+                id=rid,
+                title=r.title[:60],
+                description=f"{r.system} · {r.source}{size}"[:80],
+                input_message_content=InputTextMessageContent(
+                    message,
+                    parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=True,
+                ),
+            )
+        )
+
+    if not articles:
+        articles = [
+            InlineQueryResultArticle(
+                id="noresults",
+                title="Sin resultados",
+                description=f"Nada encontrado para «{query}»",
+                input_message_content=InputTextMessageContent(
+                    f"Sin resultados para «{escape(query)}»."
+                ),
+            )
+        ]
+
+    await iq.answer(articles, cache_time=300, is_personal=False)
+
+
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     log.exception("excepción no manejada", exc_info=context.error)
 
@@ -356,6 +446,7 @@ def main() -> None:
     app.add_handler(CommandHandler(["start", "help"], start))
     app.add_handler(CommandHandler("sistemas", systems_cmd))
     app.add_handler(CommandHandler("buscar", buscar))
+    app.add_handler(InlineQueryHandler(inline_query))
     app.add_error_handler(on_error)
 
     log.info("Bot iniciado")
