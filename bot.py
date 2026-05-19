@@ -355,8 +355,18 @@ async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     system, query = parse_args(context.args or [])
     if not query:
         await update.effective_message.reply_html(
-            "Uso: <code>/buscar [sistema] nombre</code>\n"
-            "Ej: <code>/buscar snes chrono trigger</code>"
+            "Uso: <code>/buscar &lt;sistema&gt; &lt;nombre&gt;</code>\n"
+            "Ej: <code>/buscar snes chrono trigger</code>\n"
+            "También vale al final: <code>/buscar chrono trigger snes</code>"
+        )
+        return
+    if not system:
+        await update.effective_message.reply_html(
+            f"🤔 Necesito un sistema para buscar <b>{escape(query)}</b>.\n\n"
+            f"Ejemplos:\n"
+            f"• <code>/buscar snes {escape(query)}</code>\n"
+            f"• <code>/buscar {escape(query)} gba</code>\n\n"
+            f"Lista de sistemas: /sistemas"
         )
         return
 
@@ -396,6 +406,19 @@ async def inline_query(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     system, query = parse_args(text.split())
     if not query:
         await iq.answer([], cache_time=10, is_personal=False)
+        return
+    if not system:
+        hint = InlineQueryResultArticle(
+            id="nosys",
+            title="Falta el sistema",
+            description=f"Añade el sistema. Ej: snes {query}",
+            input_message_content=InputTextMessageContent(
+                f"Para buscar <b>{escape(query)}</b> indica un sistema "
+                f"(ej: <code>snes {escape(query)}</code>).",
+                parse_mode=ParseMode.HTML,
+            ),
+        )
+        await iq.answer([hint], cache_time=10, is_personal=False)
         return
 
     try:

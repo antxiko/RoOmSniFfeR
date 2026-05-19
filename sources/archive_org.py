@@ -140,14 +140,11 @@ class ArchiveOrgSource(Source):
             # sistema como hint, restringido a 'software' para evitar videos.
             hint = SYSTEM_QUERY_HINT[sys_key]
             q = f"{title_clause} AND ({hint}) AND mediatype:software"
-        elif sys_key:
-            # Sistema especificado pero sin colección ni hint: no hacemos
-            # búsqueda libre (devolvería juegos de otros sistemas). Los
-            # packs ya cubren este caso.
-            return []
         else:
-            # Sin sistema: búsqueda libre con hint "rom".
-            q = f"{title_clause} AND (subject:rom OR subject:roms OR title:rom)"
+            # Sistema sin colección ni hint, o sin sistema: no hacemos
+            # búsqueda libre (devolvía resultados de cualquier consola).
+            # El bot exige sistema antes de llegar aquí.
+            return []
 
         params = {
             "q": q,
