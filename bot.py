@@ -113,6 +113,7 @@ SYSTEM_ALIASES: dict[str, str] = {
     "segasaturn": "saturn",
     "segadreamcast": "dreamcast",
     "ggear": "gamegear",
+    "gg": "gamegear",
     "nintendods": "nds",
     "famicomdisksystem": "fds",
     "famicom": "nes",
@@ -227,7 +228,7 @@ HELP_TEXT = (
 
 
 async def start(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_html(HELP_TEXT)
+    await update.effective_message.reply_html(HELP_TEXT)
 
 
 SYSTEM_GROUPS: list[tuple[str, list[str]]] = [
@@ -273,7 +274,7 @@ async def systems_cmd(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     lines.append(
         f"\n<i>{len(SYSTEMS)} sistemas · {len(SYSTEM_ALIASES)} aliases reconocidos</i>"
     )
-    await update.message.reply_html("\n".join(lines))
+    await update.effective_message.reply_html("\n".join(lines))
 
 
 def parse_args(args: list[str]) -> tuple[str | None, str]:
@@ -336,13 +337,13 @@ def render_results(results: list[RomResult], query: str) -> tuple[str, InlineKey
 async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     system, query = parse_args(context.args or [])
     if not query:
-        await update.message.reply_html(
+        await update.effective_message.reply_html(
             "Uso: <code>/buscar [sistema] nombre</code>\n"
             "Ej: <code>/buscar snes chrono trigger</code>"
         )
         return
 
-    msg = await update.message.reply_html(f"🐕‍🦺 Olfateando <i>{escape(query)}</i>…")
+    msg = await update.effective_message.reply_html(f"🐕‍🦺 Olfateando <i>{escape(query)}</i>…")
     try:
         results = await search_all(query, system)
     except Exception as e:
