@@ -393,7 +393,7 @@ async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if bad:
         await update.effective_message.reply_html(
             f"🏴‍☠️ Este bot no apoya la piratería, piraaataaaa.\n"
-            f"<b>«{escape(bad)}»</b> es comercial y sigue a la venta. Cómpralo."
+            f"<b>«{escape(bad)}»</b> es comercial y sigue a la venta. Panzer hijodeputa."
         )
         return
 
@@ -455,7 +455,7 @@ async def inline_query(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
             description=f"«{bad}» es comercial. Cómpralo.",
             input_message_content=InputTextMessageContent(
                 f"🏴‍☠️ Este bot no apoya la piratería, piraaataaaa.\n"
-                f"<b>«{escape(bad)}»</b> es comercial y sigue a la venta.",
+                f"<b>«{escape(bad)}»</b> es comercial y sigue a la venta. Panzer hijodeputa.",
                 parse_mode=ParseMode.HTML,
             ),
         )
