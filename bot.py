@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import re
 import unicodedata
 from html import escape
 
@@ -296,15 +297,43 @@ def _normalize(s: str) -> str:
     return "".join(s.split())
 
 
-def is_pcfutbol(query: str) -> bool:
-    """Detecta 'pc futbol', 'pcfutbol8', 'PC Fútbol 2001', etc."""
-    return "pcfutbol" in _normalize(query)
+_PCFUTBOL8_RE = re.compile(r"pcfutbol8(?!\d)")
+
+
+def is_pcfutbol8(query: str) -> bool:
+    """Detecta SOLO PC Fútbol 8 (no otras entregas).
+    Acepta 'pc futbol 8', 'pcfutbol8', 'PC Fútbol 8', etc."""
+    return bool(_PCFUTBOL8_RE.search(_normalize(query)))
 
 
 PCFUTBOL_MESSAGE_HTML = (
     "🤣🤣🤣 JAJAJAJAJAJAJAJAJA 🤣🤣🤣\n"
     "<b>HECTOR HIJODEPUTA SACA EL PC FUTBOL 8</b>"
 )
+
+PIRATE_GIF_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "assets",
+    "spongebob-pirate.gif",
+)
+# Cache del file_id de Telegram tras la primera subida (mucho más rápido
+# que reenviar el archivo cada vez).
+_PIRATE_GIF_FILE_ID: str | None = None
+
+
+async def send_pirate_gif(message) -> None:
+    """Manda el gif de Spongebob después de un mensaje de blacklist."""
+    global _PIRATE_GIF_FILE_ID
+    try:
+        if _PIRATE_GIF_FILE_ID:
+            await message.reply_animation(animation=_PIRATE_GIF_FILE_ID)
+        else:
+            with open(PIRATE_GIF_PATH, "rb") as f:
+                sent = await message.reply_animation(animation=f)
+            if sent and sent.animation:
+                _PIRATE_GIF_FILE_ID = sent.animation.file_id
+    except Exception:
+        log.exception("no se pudo enviar el gif pirata")
 
 
 def blacklisted_term(system: str, query: str) -> str | None:
@@ -429,7 +458,7 @@ async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     systems, query = parse_args(context.args or [])
     # Easter egg PC Fútbol — prioridad sobre todo
     full_text = " ".join(context.args or [])
-    if is_pcfutbol(full_text):
+    if is_pcfutbol8(full_text):
         await update.effective_message.reply_html(PCFUTBOL_MESSAGE_HTML)
         return
     if not query:
@@ -462,10 +491,11 @@ async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if not allowed:
         term = next(iter(blocked_terms), query)
-        await update.effective_message.reply_html(
+        msg = await update.effective_message.reply_html(
             f"🏴‍☠️ Este bot no apoya la piratería, piraaataaaa.\n"
             f"<b>«{escape(term)}»</b> es comercial y sigue a la venta. Panzer hijodeputa."
         )
+        await send_pirate_gif(msg)
         return
 
     sys_label = ", ".join(allowed)
@@ -495,7 +525,7 @@ async def inline_query(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     text = (iq.query or "").strip()
 
     # Easter egg PC Fútbol — prioridad sobre todo
-    if text and is_pcfutbol(text):
+    if text and is_pcfutbol8(text):
         egg = InlineQueryResultArticle(
             id="pcfutbol",
             title="🤣 JAJAJAJAJAJA 🤣",
