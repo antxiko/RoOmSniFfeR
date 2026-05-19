@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import unicodedata
 from html import escape
 
 from dotenv import load_dotenv
@@ -288,6 +289,24 @@ BLACKLIST: dict[str, list[str]] = {
 }
 
 
+def _normalize(s: str) -> str:
+    """Quita acentos, mayúsculas y espacios para comparación tolerante."""
+    s = unicodedata.normalize("NFD", s.lower())
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return "".join(s.split())
+
+
+def is_pcfutbol(query: str) -> bool:
+    """Detecta 'pc futbol', 'pcfutbol8', 'PC Fútbol 2001', etc."""
+    return "pcfutbol" in _normalize(query)
+
+
+PCFUTBOL_MESSAGE_HTML = (
+    "🤣🤣🤣 JAJAJAJAJAJAJAJAJA 🤣🤣🤣\n"
+    "<b>HECTOR HIJODEPUTA SACA EL PC FUTBOL 8</b>"
+)
+
+
 def blacklisted_term(system: str, query: str) -> str | None:
     """Devuelve la palabra prohibida si la query matchea la blacklist."""
     q_low = query.lower()
@@ -408,6 +427,11 @@ def render_results(results: list[RomResult], query: str) -> tuple[str, InlineKey
 
 async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     systems, query = parse_args(context.args or [])
+    # Easter egg PC Fútbol — prioridad sobre todo
+    full_text = " ".join(context.args or [])
+    if is_pcfutbol(full_text):
+        await update.effective_message.reply_html(PCFUTBOL_MESSAGE_HTML)
+        return
     if not query:
         await update.effective_message.reply_html(
             "Uso: <code>/buscar &lt;sistema&gt; &lt;nombre&gt;</code>\n"
@@ -469,6 +493,19 @@ async def inline_query(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     if iq is None:
         return
     text = (iq.query or "").strip()
+
+    # Easter egg PC Fútbol — prioridad sobre todo
+    if text and is_pcfutbol(text):
+        egg = InlineQueryResultArticle(
+            id="pcfutbol",
+            title="🤣 JAJAJAJAJAJA 🤣",
+            description="HECTOR HIJODEPUTA SACA EL PC FUTBOL 8",
+            input_message_content=InputTextMessageContent(
+                PCFUTBOL_MESSAGE_HTML, parse_mode=ParseMode.HTML
+            ),
+        )
+        await iq.answer([egg], cache_time=60, is_personal=False)
+        return
 
     if not text:
         # Mensaje de ayuda cuando aún no han escrito nada
