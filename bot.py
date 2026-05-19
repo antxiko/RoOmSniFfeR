@@ -277,6 +277,26 @@ async def systems_cmd(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_html("\n".join(lines))
 
 
+# Blacklist de juegos comerciales que siguen a la venta. Estructura:
+#   sistema (o "*" para todos) -> lista de substrings prohibidos (case-insensitive)
+# El match es por substring en la query del usuario.
+BLACKLIST: dict[str, list[str]] = {
+    "msx": ["pampas"],  # Pampas & Selene (Vitruvian, homebrew comercial vigente)
+    # Añadir aquí:  "sistema": ["palabra1", "palabra2"],
+    # "*": ["x"],     # bloquea en cualquier sistema
+}
+
+
+def blacklisted_term(system: str, query: str) -> str | None:
+    """Devuelve la palabra prohibida si la query matchea la blacklist."""
+    q_low = query.lower()
+    for sys_key in (system, "*"):
+        for term in BLACKLIST.get(sys_key, ()):
+            if term.lower() in q_low:
+                return term
+    return None
+
+
 def _as_system(word: str) -> str | None:
     """Devuelve el sistema canónico si `word` es un sistema/alias, else None."""
     w = word.lower()
@@ -369,6 +389,13 @@ async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"Lista de sistemas: /sistemas"
         )
         return
+    bad = blacklisted_term(system, query)
+    if bad:
+        await update.effective_message.reply_html(
+            f"🏴‍☠️ Este bot no apoya la piratería, piraaataaaa.\n"
+            f"<b>«{escape(bad)}»</b> es comercial y sigue a la venta. Cómpralo."
+        )
+        return
 
     msg = await update.effective_message.reply_html(f"🐕‍🦺 Olfateando <i>{escape(query)}</i>…")
     try:
@@ -419,6 +446,20 @@ async def inline_query(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
             ),
         )
         await iq.answer([hint], cache_time=10, is_personal=False)
+        return
+    bad = blacklisted_term(system, query)
+    if bad:
+        pirate = InlineQueryResultArticle(
+            id="blacklist",
+            title="🏴‍☠️ Piraaataaaa",
+            description=f"«{bad}» es comercial. Cómpralo.",
+            input_message_content=InputTextMessageContent(
+                f"🏴‍☠️ Este bot no apoya la piratería, piraaataaaa.\n"
+                f"<b>«{escape(bad)}»</b> es comercial y sigue a la venta.",
+                parse_mode=ParseMode.HTML,
+            ),
+        )
+        await iq.answer([pirate], cache_time=60, is_personal=False)
         return
 
     try:
