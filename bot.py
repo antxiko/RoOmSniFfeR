@@ -283,7 +283,7 @@ async def systems_cmd(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
 #   sistema (o "*" para todos) -> lista de substrings prohibidos (case-insensitive)
 # El match es por substring en la query del usuario.
 BLACKLIST: dict[str, list[str]] = {
-    "msx": ["pampas", "selene"],  # Pampas & Selene (Vitruvian, homebrew comercial)
+    "msx": ["pampas", "selene", "trucho"],  # Pampas & Selene, Trucho (comerciales)
     "md": ["earthion"],            # Earthion (Yuzo Koshiro, 2025, comercial)
     # Añadir aquí:  "sistema": ["palabra1", "palabra2"],
     # "*": ["x"],     # bloquea en cualquier sistema
