@@ -10,8 +10,6 @@ from html import escape
 
 from dotenv import load_dotenv
 from telegram import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
     InlineQueryResultArticle,
     InputTextMessageContent,
     Update,
@@ -422,36 +420,22 @@ async def search_all(query: str, systems: list[str]) -> list[RomResult]:
     return results
 
 
-def render_results(results: list[RomResult], query: str) -> tuple[str, InlineKeyboardMarkup | None]:
+def render_results(results: list[RomResult], query: str) -> str:
     if not results:
         q = escape(query)
         return (
             f"😶 Sin resultados para <b>{q}</b>.\n"
             f"Prueba con otro nombre o añade el sistema delante "
-            f"(ej: <code>/buscar gba {q}</code>).",
-            None,
+            f"(ej: <code>/buscar gba {q}</code>)."
         )
 
     lines = [f"🔎 <b>{len(results)}</b> resultados para <b>{escape(query)}</b>:\n"]
-    buttons: list[list[InlineKeyboardButton]] = []
     for i, r in enumerate(results[:20], 1):
-        size = f" · {r.size}" if r.size else ""
-        direct = " 📎" if r.has_direct_download else ""
+        size = f"  ·  {escape(r.size)}" if r.size else ""
         lines.append(
-            f"<b>{i}.</b> {escape(r.title)}\n"
-            f"   <i>{escape(r.system)} · {escape(r.source)}{escape(size)}</i>{direct}"
+            f"{i}. <a href=\"{escape(r.best_url, quote=True)}\">{escape(r.title)}</a>{size}"
         )
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    f"{i}. {r.title[:40]}",
-                    url=r.best_url,
-                )
-            ]
-        )
-
-    lines.append("\n📎 = enlace de descarga directo · 🔗 = página del juego")
-    return "\n".join(lines), InlineKeyboardMarkup(buttons)
+    return "\n".join(lines)
 
 
 async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -509,12 +493,12 @@ async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await msg.edit_text(f"💥 Error: {e}")
         return
 
-    text, kb = render_results(results, query)
+    text = render_results(results, query)
     if blocked_terms:
         # Aviso suave de que algún sistema quedó bloqueado
         warn = ", ".join(f"«{escape(t)}»" for t in blocked_terms)
         text = f"<i>⚠️ Bloqueado por blacklist: {warn}</i>\n\n" + text
-    await msg.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=kb, disable_web_page_preview=True)
+    await msg.edit_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 
 async def inline_query(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
